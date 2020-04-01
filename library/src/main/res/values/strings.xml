@@ -1,0 +1,5 @@
+<resources>
+    <string name="common_app_sure">确认</string>
+    <string name="common_app_cancel">确认</string>
+    <string name="common_bundles_monitor_install_apk_tips">安装应用需要打开未知来源权限，请去设置中开启权限</string>
+</resources>

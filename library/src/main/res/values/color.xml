@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="common_text">#de000000</color>
+    <color name="common_text1">#8a000000</color>
+    <color name="common_text2">#61000000</color>
+    <color name="common_ripple">#10000000</color>
+    <color name="common_main">#795548</color>
+</resources>
