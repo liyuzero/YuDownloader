@@ -21,7 +21,7 @@ class YuDownloadManager {
 
         private const val MAX_DOWNLOADING_NUM = 3
 
-        internal fun init(config: YuDownloadConfig) {
+        fun init(config: YuDownloadConfig) {
             instance.mConfig = config
         }
     }
