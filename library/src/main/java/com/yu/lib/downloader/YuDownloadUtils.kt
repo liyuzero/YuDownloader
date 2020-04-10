@@ -3,7 +3,7 @@ package com.yu.lib.downloader
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 
-object YuDownloadUtils {
+internal object YuDownloadUtils {
 
     fun md5(text: String): String {
         try {

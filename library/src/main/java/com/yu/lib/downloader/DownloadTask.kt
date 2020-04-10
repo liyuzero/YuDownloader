@@ -5,19 +5,36 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import java.io.File
 
-class DownloadTask(val url: String, val filePath: String): Comparable<DownloadTask>{
-    internal var id: String = YuDownloadUtils.md5(url + "_" + filePath)
+class DownloadTask(val url: String, val totalSize: Long): Comparable<DownloadTask>{
+    var id: String
     private var curStatus: DownloadStatus? = DownloadStatus.WAITING
 
+    val filePath: String = YuDownloadManager.instance.mConfig.rootDirPath + File.separator + url.substring(url.lastIndexOf("/") + 1)
     var downloadedSize: Long = 0
-    var totalSize = 0L
     var createTime = 0L
     var completeTime = 0L
 
-    val mListenData: MutableLiveData<DownloadListenData> = MutableLiveData()
+    internal var preProgressNotifyTime = 20L
 
-    fun addDownloadListener(owner: LifecycleOwner, observer: Observer<DownloadListenData>) {
+    init {
+        id = YuDownloadUtils.md5(url + "_" + filePath)
+        downloadedSize = 0
+        createTime = System.currentTimeMillis()
+        completeTime = -1
+        curStatus = DownloadStatus.WAITING
+    }
+
+    private val mListenData: MutableLiveData<DownloadTask> = MutableLiveData()
+
+    fun addDownloadListener(owner: LifecycleOwner, observer: Observer<DownloadTask>) {
         mListenData.observe(owner, observer)
+    }
+
+    internal fun notifyListeners(downloadStatus: DownloadStatus) {
+        setCurStatus(downloadStatus)
+        YuDownloadManager.instance.mMainHandler.post {
+            mListenData.value = this
+        }
     }
 
     override fun compareTo(other: DownloadTask): Int {
@@ -32,47 +49,63 @@ class DownloadTask(val url: String, val filePath: String): Comparable<DownloadTa
     }
 
     fun setCurStatus(status: DownloadStatus?) {
-        curStatus = status
+        if(curStatus != status) {
+            curStatus = status
+            YuDownloadManager.instance.mTaskInfoManager.updateTaskStatus(this)
+        }
     }
 
     fun setCurStatus(status: Int) {
-        val downloadStatus: DownloadStatus? = null
         when(status) {
             DownloadStatus.PAUSED.type -> {
-                DownloadStatus.PAUSED
+                curStatus = DownloadStatus.PAUSED
             }
             DownloadStatus.RUNNING.type -> {
-                DownloadStatus.RUNNING
+                curStatus = DownloadStatus.RUNNING
             }
             DownloadStatus.WAITING.type -> {
-                DownloadStatus.WAITING
+                curStatus = DownloadStatus.WAITING
             }
             DownloadStatus.ERROR.type -> {
-                DownloadStatus.ERROR
+                curStatus = DownloadStatus.ERROR
             }
             DownloadStatus.COMPLETE.type -> {
-                DownloadStatus.COMPLETE
+                curStatus = DownloadStatus.COMPLETE
             }
             DownloadStatus.COMPLETE_FILE_NOT_EXIST.type -> {
-                DownloadStatus.COMPLETE_FILE_NOT_EXIST
+                curStatus = DownloadStatus.COMPLETE_FILE_NOT_EXIST
             }
         }
-        setCurStatus(downloadStatus)
     }
-}
 
-data class DownloadListenData(val status: DownloadListenStatus, val task: DownloadTask)
+    fun getFileSizeDes(): String {
+        val kb = totalSize / 1024
+        if(kb < 1024) {
+            return "$kb" + "kb"
+        }
+        val mb = totalSize / 1024.0 / 1024.0
+        if(mb < 1024) {
+            return String.format("%.1f", mb) + "m"
+        }
+        return String.format("%.2f", totalSize / 1024.0 / 1024.0 / 1024.0) + "m"
+    }
 
-enum class DownloadListenStatus {
-    WAITING, START, PROGRESS, FAIL, COMPLETE
-}
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
 
-interface DownloadListener {
-    fun waiting(task: DownloadTask)
-    fun start(task: DownloadTask)
-    fun progress(task: DownloadTask)
-    fun fail(task: DownloadTask)
-    fun complete(task: DownloadTask)
+        other as DownloadTask
+
+        if (url != other.url) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return url.hashCode()
+    }
+
+
 }
 
 enum class DownloadStatus(val message: String, val type: Int) {
@@ -82,5 +115,9 @@ enum class DownloadStatus(val message: String, val type: Int) {
     ERROR("下载失败", 3),
 
     COMPLETE("下载完成", 4),
-    COMPLETE_FILE_NOT_EXIST("下载完成，但是文件不存在", 5)
+    COMPLETE_FILE_NOT_EXIST("下载完成，但是文件不存在", 5);
+
+    fun isComplete(): Boolean {
+        return type >= 4
+    }
 }

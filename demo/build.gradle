@@ -28,4 +28,8 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.1.0'
     implementation 'androidx.core:core-ktx:1.2.0'
     implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+    implementation project(path: ':library')
+
+    implementation 'com.github.liyuzero:common:0.0.7'
+    implementation 'androidx.cardview:cardview:1.0.0'
 }
