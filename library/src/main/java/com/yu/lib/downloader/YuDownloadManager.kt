@@ -1,7 +1,12 @@
 package com.yu.lib.downloader
 
 import android.annotation.SuppressLint
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.os.Handler
+import android.os.IBinder
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.RandomAccessFile
@@ -11,6 +16,7 @@ import javax.net.ssl.*
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
+import kotlin.collections.ArrayList
 
 
 class YuDownloadManager {
@@ -23,18 +29,49 @@ class YuDownloadManager {
         private const val MAX_DOWNLOADING_NUM = 3
 
         fun init(config: YuDownloadConfig) {
+            config.context.bindService(Intent(config.context, DownloadService::class.java), object : ServiceConnection{
+                override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                    val yuBinder = service as DownloadService.YuBinder
+                    instance.mDownloadService = yuBinder.getService()
+                }
+
+                override fun onServiceDisconnected(name: ComponentName?) {
+
+                }
+
+            }, Context.BIND_AUTO_CREATE)
+
             instance.mConfig = config
             instance.mTaskInfoManager = TaskInfoManager(config)
             instance.initData()
         }
     }
 
+    private var mDownloadService: DownloadService? = null
     internal lateinit var mTaskInfoManager: TaskInfoManager
     internal lateinit var mConfig: YuDownloadConfig
     val mMainHandler = Handler()
 
-    private var mDownloadingQueue: PriorityBlockingQueue<DownloadTask> = PriorityBlockingQueue()
-    private var mDownloadCompleteQueue: PriorityBlockingQueue<DownloadTask> = PriorityBlockingQueue()
+    internal var mDownloadingQueue: PriorityBlockingQueue<DownloadTask> = PriorityBlockingQueue()
+    internal var mDownloadCompleteQueue: PriorityBlockingQueue<DownloadTask> = PriorityBlockingQueue()
+
+    //初始化数据队列
+    private fun initData() {
+        mDownloadCompleteQueue.clear()
+        mDownloadCompleteQueue.clear()
+        val taskList = mTaskInfoManager.getTaskList()
+        for (task in taskList) {
+            if(task.getCurStatus().isComplete()) {
+                mDownloadCompleteQueue.add(task)
+            } else {
+                mDownloadingQueue.add(task)
+            }
+
+            if(!task.getCurStatus().isComplete() && task.getCurStatus() != DownloadStatus.ERROR) {
+                task.setCurStatus(DownloadStatus.PAUSED)
+            }
+        }
+    }
 
     fun getDownloadingList(): ArrayList<DownloadTask>{
         val list = ArrayList<DownloadTask>()
@@ -52,27 +89,11 @@ class YuDownloadManager {
         return list
     }
 
-    //初始化数据队列
-    private fun initData() {
-        val taskList = mTaskInfoManager.getTaskList()
-        for (task in taskList) {
-            if(task.getCurStatus().isComplete()) {
-                mDownloadCompleteQueue.add(task)
-            } else {
-                mDownloadingQueue.add(task)
-            }
-
-            if(!task.getCurStatus().isComplete() && task.getCurStatus() != DownloadStatus.ERROR) {
-                task.setCurStatus(DownloadStatus.PAUSED)
-            }
-        }
-    }
-
     /*------------------------------------- API START -----------------------------------*/
 
     //下载任务的初始化
     fun createAndInitTask(url: String, listener: OnYuDownloadListener) {
-        DownloadService.executeFunction {
+        mDownloadService?.executeFunction {
             val size = DownloadUtils.getNetFileSize(url).toLong()
             listener.createSuccess(if(size == -1L) null else DownloadTask(url, size))
         }
@@ -84,12 +105,12 @@ class YuDownloadManager {
             return
         }
         mTaskInfoManager.insertOrUpdateTask(task)
-        DownloadService.executeFunction {
-            task.setCurStatus(DownloadStatus.WAITING)
-            mDownloadingQueue.add(task)
-            if(getCurDownloadingNum() >= MAX_DOWNLOADING_NUM) {
-                task.notifyListeners(DownloadStatus.WAITING)
-            } else {
+        task.setCurStatus(DownloadStatus.WAITING)
+        mDownloadingQueue.add(task)
+        if(getCurDownloadingNum() >= MAX_DOWNLOADING_NUM) {
+            task.notifyListeners(DownloadStatus.WAITING)
+        } else {
+            mDownloadService?.executeFunction {
                 autoDispatchTask()
             }
         }
@@ -100,7 +121,7 @@ class YuDownloadManager {
         if (task.getCurStatus() == DownloadStatus.COMPLETE) {
             return
         }
-        DownloadService.executeFunction {
+        mDownloadService?.executeFunction {
             when(task.getCurStatus()) {
                 DownloadStatus.ERROR,
                 DownloadStatus.PAUSED -> {
@@ -233,6 +254,8 @@ internal object DownloadUtils {
                 }
             }
 
+            YuDownloadManager.instance.mDownloadingQueue.remove(task)
+            YuDownloadManager.instance.mDownloadCompleteQueue.add(task)
             if(File(task.filePath).exists()) {
                 task.notifyListeners(DownloadStatus.COMPLETE)
             } else {

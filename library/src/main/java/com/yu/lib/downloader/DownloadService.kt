@@ -2,6 +2,7 @@ package com.yu.lib.downloader
 
 import android.app.Service
 import android.content.Intent
+import android.os.Binder
 import android.os.IBinder
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -22,16 +23,20 @@ class DownloadService: Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? {
-        return null
+        return YuBinder()
     }
 
-    companion object {
-        private val mThreadPool: ExecutorService = Executors.newFixedThreadPool(3)
+    private val mThreadPool: ExecutorService = Executors.newFixedThreadPool(3)
 
-        fun executeFunction(method: () -> Unit) {
-            mThreadPool.execute {
-                method()
-            }
+    fun executeFunction(method: () -> Unit) {
+        mThreadPool.execute {
+            method()
+        }
+    }
+
+    inner class YuBinder: Binder() {
+        fun getService(): DownloadService {
+            return this@DownloadService
         }
     }
 }
